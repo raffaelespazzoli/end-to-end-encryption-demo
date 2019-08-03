@@ -29,6 +29,7 @@ oc new-project cert-manager
 oc label namespace cert-manager certmanager.k8s.io/disable-validation=true
 oc apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v0.9.0/cert-manager-openshift.yaml
 oc patch deployment cert-manager -n cert-manager -p '{"spec":{"template":{"spec":{"containers":[{"name":"cert-manager","args":[{"--v=2"},{"--cluster-resource-namespace=$(POD_NAMESPACE)"},{"--leader-election-namespace=$(POD_NAMESPACE)"},{"--dns01-recursive-nameservers=8.8.8.8:53"}]}]}}}}'
+TO-TEST
 ```
 
 ## Deploying the Let's Encrypt cluster issuer
@@ -91,6 +92,7 @@ oc set volume deployment preference-v1 -n demo --add=true --type=secret --secret
 oc set volume deployment recommendation-v1 -n demo --add=true --type=secret --secret-name=recommendation --name=keystores --mount-path=/keystores --read-only=true
 
 oc patch deployment customer -n demo -p '{"spec":{"template":{"spec":{"containers":[{"name":"customer","args":[{"-Djavax.net.ssl.keyStore=/keystores/keystore.jks"},{"-Djavax.net.ssl.keyStorePassword=changeme"},{"-Djavax.net.ssl.trustStore=/keystores/truststore.jks"},{"-Djavax.net.ssl.trustStorePassword=changeme"}]}]}}}}'
+TO-TEST
 
 oc patch deployment preference-v1 -n demo -p '{"spec":{"template":{"spec":{"containers":[{"name":"preference","args":[{"-Djavax.net.ssl.keyStore=/keystores/keystore.jks"},{"-Djavax.net.ssl.keyStorePassword=changeme"},{"-Djavax.net.ssl.trustStore=/keystores/truststore.jks"},{"-Djavax.net.ssl.trustStorePassword=changeme"}]}]}}}}'
 
@@ -104,3 +106,24 @@ oc patch route customer -n demo -p '{"spec":{"tls":{"termination":"reencrypt"}}}
 oc annotate route customer -n demo cert-utils-operator.redhat-cop.io/destinationCA-from-secret=customer
 ```
 
+## Install Reloader
+
+When a certificate is renewed, the files will be updated on the container's file system. Unless the app is written to watch those files, we need to restart the application. We are going to make that happen with the [Reloader] operator
+
+```shell
+oc new-project reloader
+helm repo add stakater https://stakater.github.io/stakater-charts
+helm repo update
+helm fetch stakater/reloader
+helm template reloader-v0.0.37.tgz --namespace reloader | oc apply -f - -n reloader
+TO-TEST
+
+```
+
+## Configure deployments to reload upon certificate change
+
+```shell
+oc annotate deployment customer -n demo secret.reloader.stakater.com/reload=customer;
+oc annotate deployment preference-v1 -n demo secret.reloader.stakater.com/reload=preference;
+oc annotate deployment recommendation-v1 -n demo secret.reloader.stakater.com/reload=recommendation;
+```
