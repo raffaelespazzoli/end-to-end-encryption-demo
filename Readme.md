@@ -139,7 +139,17 @@ oc set volume deployment recommendation-v1 -n demo --add=true --type=secret --se
 ### Configure deployments to reload upon certificate change
 
 ```shell
-oc annotate deployment customer -n demo secret.reloader.stakater.com/reload=customer;
-oc annotate deployment preference-v1 -n demo secret.reloader.stakater.com/reload=preference;
-oc annotate deployment recommendation-v1 -n demo secret.reloader.stakater.com/reload=recommendation;
+oc annotate deployment customer -n demo secret.reloader.stakater.com/reload=service-customer;
+oc annotate deployment preference-v1 -n demo secret.reloader.stakater.com/reload=route-service-preference;
+oc annotate deployment recommendation-v1 -n demo secret.reloader.stakater.com/reload=service-recommendation;
 ```
+
+### Testing certificate renewal
+
+Let's use the preference service to test the certificate renewal. We can do that by creating a very short live certificate:
+
+```shell
+oc patch certificate preference -n demo -p '{"spec":{"duration":"1h1m","renewBefore":"1h"}}' --type=merge
+```
+
+with this setting we should see the preference deployment redeploy every minute.

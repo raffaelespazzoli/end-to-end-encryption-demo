@@ -11,5 +11,7 @@ spec:
     kind: ClusterIssuer
   commonName: ${service}.${namespace}.svc
   dnsNames:
+  - ${service}  
   - ${service}.${namespace}.svc
+  - ${service}.${namespace}.svc.cluster.local
   keyEncoding: pkcs8
