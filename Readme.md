@@ -90,7 +90,7 @@ The customer service will be exposed externally via the router. The customer ser
 
 ```shell
 ## create the route
-oc create route reencrypt customer --service=customer -n demo
+oc create route reencrypt customer --service=customer --port=https -n demo
 ## create the external certificate
 namespace=demo route=customer host=$(oc get route $route  -n $namespace -o jsonpath='{.spec.host}') envsubst < certificates/ACME-certificate.yaml | oc apply -f - -n demo
 ## annotate the route to use the certificate
@@ -113,7 +113,7 @@ The preference microservice needs to be called by the customer microservice. The
 
 ```shell
 ## create the passthrough route
-oc create route passthrough preference --service=preference -n demo
+oc create route passthrough preference --service=preference --port=https -n demo
 ## create the two-SANs certificate
 namespace=demo route=preference host=$(oc get route $route  -n $namespace -o jsonpath='{.spec.host}') service=preference envsubst < certificates/multiSAN-internal-certificate.yaml | oc apply -f - -n demo
 ## annotate the secret to create keystores

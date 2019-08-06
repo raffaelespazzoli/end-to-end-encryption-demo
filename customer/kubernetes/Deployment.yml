@@ -18,7 +18,10 @@ spec:
         version: v1
     spec:
       containers:
-        name: customer
+      - name: preference
+        env:
+        - name: JAVA_OPTIONS
+          value: '-Djavax.net.ssl.trustStore=/keystores/truststore.jks -Djavax.net.ssl.trustStorePassword=changeme'
         image: quay.io/raffaelespazzoli/e2e-encryption-tutorial-customer:v1
         imagePullPolicy: IfNotPresent
         ports:

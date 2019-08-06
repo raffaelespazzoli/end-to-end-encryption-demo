@@ -21,7 +21,7 @@ public class PreferencesController {
 
     private final RestTemplate restTemplate;
 
-    @Value("${recommendations.api.url:http://recommendations:8080}")
+    @Value("${recommendations.api.url:https://recommendation.demo.svc:8443}")
     private String remoteURL;
 
     public PreferencesController(RestTemplate restTemplate) {

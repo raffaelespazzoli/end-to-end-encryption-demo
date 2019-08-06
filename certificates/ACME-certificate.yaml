@@ -1,7 +1,7 @@
 apiVersion: certmanager.k8s.io/v1alpha1
 kind: Certificate
 metadata:
-  name: ${route}
+  name: route-${route}
   namespace: ${namespace}
 spec:
   secretName: route-${route}

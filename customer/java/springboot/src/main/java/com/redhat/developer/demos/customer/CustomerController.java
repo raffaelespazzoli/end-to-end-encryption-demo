@@ -24,7 +24,7 @@ public class CustomerController {
 
     private final RestTemplate restTemplate;
 
-    @Value("${preferences.api.url:http://preference:8080}")
+    @Value("${preferences.api.url:http://preference.demo.svc:8443}")
     private String remoteURL;
 
     @Autowired
