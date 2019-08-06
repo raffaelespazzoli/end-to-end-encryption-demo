@@ -3,7 +3,7 @@ kind: Certificate
 metadata:
   name: ${service}
 spec:
-  secretName: ${service}
+  secretName: route-service-${service}
   issuerRef:
     name: internal-issuer
     # We can reference ClusterIssuers by changing the kind here.
@@ -12,3 +12,5 @@ spec:
   commonName: ${service}.${namespace}.svc
   dnsNames:
   - ${service}.${namespace}.svc
+  - '${host}'
+  keyEncoding: pkcs8

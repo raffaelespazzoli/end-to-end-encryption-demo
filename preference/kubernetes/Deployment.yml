@@ -1,0 +1,32 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: preference
+    version: v1
+  name: preference-v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: preference
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: preference
+        version: v1
+    spec:
+      containers:
+        image: quay.io/raffaelespazzoli/e2e-encryption-tutorial-preference:v1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8443
+          name: https
+          protocol: TCP
+        - containerPort: 8778
+          name: jolokia
+          protocol: TCP
+        - containerPort: 9779
+          name: prometheus
+          protocol: TCP

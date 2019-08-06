@@ -4,7 +4,7 @@ metadata:
   name: ${route}
   namespace: ${namespace}
 spec:
-  secretName: cert-manager-${route}
+  secretName: route-${route}
   commonName: ${host}
   dnsNames:
   - ${host}
@@ -16,4 +16,5 @@ spec:
     - dns01:
         provider: cluster-dns
       domains:
-      - '${host}'   
+      - '${host}'
+  keyEncoding: pkcs8       

@@ -1,26 +1,11 @@
 # End to End Encryption Demo
 
-## Deploying the Customer -> Preference -> Recommendation App
+this is a demo on how to create and end to end encryption for a group of microservice with self-serviced certificates.
+This demo will show step by step how to secure services for pedagogical purposes. In a real CI/CD scenario Kubernetes resources would be create with the correct configuration.
 
-you can find the application described [here](https://redhat-developer-demos.github.io/istio-tutorial/istio-tutorial/1.1.x/2deploy-microservices.html#deploycustomer)
+## Deploying the needed operators
 
-Deploy it with the following:
-
-```shell
-oc new-project demo
-
-oc apply -f https://raw.githubusercontent.com/redhat-developer-demos/istio-tutorial/master/customer/kubernetes/Deployment.yml -n demo
-oc apply -f https://raw.githubusercontent.com/redhat-developer-demos/istio-tutorial/master/customer/kubernetes/Service.yml -n demo
-oc create route edge customer --service=customer -n demo
-
-oc apply -f https://raw.githubusercontent.com/redhat-developer-demos/istio-tutorial/master/preference/kubernetes/Deployment.yml -n demo
-oc apply -f https://raw.githubusercontent.com/redhat-developer-demos/istio-tutorial/master/preference/kubernetes/Service.yml -n demo
-
-oc apply -f https://raw.githubusercontent.com/redhat-developer-demos/istio-tutorial/master/recommendation/kubernetes/Deployment.yml -n demo
-oc apply -f https://raw.githubusercontent.com/redhat-developer-demos/istio-tutorial/master/recommendation/kubernetes/Service.yml -n demo
-```
-
-## Deploying cert-manager
+### Deploying cert-manager
 
 [cert-manager](https://github.com/jetstack/cert-manager) is our certificate provisioning operator. It makes certificates a first class resource inside of OpenShift.
 
@@ -32,20 +17,7 @@ oc patch deployment cert-manager -n cert-manager -p '{"spec":{"template":{"spec"
 TO-TEST
 ```
 
-## Deploying the Let's Encrypt cluster issuer
-
-[Let's Encrypt](https://letsencrypt.org/) represent our CA for externally visible certificates (i.e. certificates that have to be trasuted by browser and OSs of our customers). 
-
-```shell
-export EMAIL=<your-lets-encrypt-email>
-oc apply -f lets_encrypt_issuer/aws-credentials.yaml
-export AWS_ACCESS_KEY_ID=$(oc get secret cert-manager-dns-credentials -n cert-manager -o jsonpath='{.data.aws_access_key_id}' | base64 -d)
-export REGION=$(oc get nodes --template='{{ with $i := index .items 0 }}{{ index $i.metadata.labels "failure-domain.beta.kubernetes.io/region" }}{{ end }}')
-export zoneid=$(oc get dns cluster -o jsonpath='{.spec.publicZone.id}')
-envsubst < lets_encrypt_issuer/lets-encrypt-issuer.yaml | oc apply -f - -n cert-manager
-```
-
-## Deploying cert-utils-operator
+### Deploying cert-utils-operator
 
 [cert-utils-operator](https://github.com/redhat-cop/cert-utils-operator) provides some additional features to managing certificates, such as injection of certificates in routes.
 
@@ -55,72 +27,116 @@ helm fetch https://github.com/redhat-cop/cert-utils-operator/raw/master/helm/cer
 helm template cert-utils-operator-0.0.1.tgz --namespace cert-utils-operator | oc apply -f - -n cert-utils-operator
 ```
 
-## Secure the route
+### Deploy Reloader
 
-```shell
-namespace=demo route=customer host=$(oc get route $route  -n $namespace -o jsonpath='{.spec.host}') envsubst < route/certificate.yaml | oc apply -f - -n demo
-oc annotate route customer -n demo cert-utils-operator.redhat-cop.io/certs-from-secret=cert-manager-customer
-```
-
-## Create the internal CA issuer
-
-We assume that services that are not exposed internally get their certificates from an internal issuer (external issuer usually have a cost based on the number of certificates). To simulate this situation we are going to use the internal CA issuer from cert-manager.
-
-```shell
-oc apply -f internal_issuer/internal-issuer.yaml -n cert-manager
-```
-
-## Create internal certificates
-
-```shell
-service=customer namespace=demo envsubst < internal_certificate/internal_cert.yaml | oc apply -f - -n demo;
-service=preference namespace=demo envsubst < internal_certificate/internal_cert.yaml | oc apply -f - -n demo;
-service=recommendation namespace=demo envsubst < internal_certificate/internal_cert.yaml | oc apply -f - -n demo;
-```
-
-## Mount certificates on the pods
-
-Java applications use keystores and truststore.
-
-```shell
-oc annotate secret customer -n demo cert-utils-operator.redhat-cop.io/generate-java-keystores=true;
-oc annotate secret preference -n demo cert-utils-operator.redhat-cop.io/generate-java-keystores=true;
-oc annotate secret recommendation -n demo cert-utils-operator.redhat-cop.io/generate-java-keystores=true;
-
-oc set volume deployment customer -n demo --add=true --type=secret --secret-name=customer --name=keystores --mount-path=/keystores --read-only=true
-oc set volume deployment preference-v1 -n demo --add=true --type=secret --secret-name=preference --name=keystores --mount-path=/keystores --read-only=true
-oc set volume deployment recommendation-v1 -n demo --add=true --type=secret --secret-name=recommendation --name=keystores --mount-path=/keystores --read-only=true
-
-oc patch deployment customer -n demo -p '{"spec":{"template":{"spec":{"containers":[{"name":"customer","args":[{"-Djavax.net.ssl.keyStore=/keystores/keystore.jks"},{"-Djavax.net.ssl.keyStorePassword=changeme"},{"-Djavax.net.ssl.trustStore=/keystores/truststore.jks"},{"-Djavax.net.ssl.trustStorePassword=changeme"}]}]}}}}'
-TO-TEST
-
-oc patch deployment preference-v1 -n demo -p '{"spec":{"template":{"spec":{"containers":[{"name":"preference","args":[{"-Djavax.net.ssl.keyStore=/keystores/keystore.jks"},{"-Djavax.net.ssl.keyStorePassword=changeme"},{"-Djavax.net.ssl.trustStore=/keystores/truststore.jks"},{"-Djavax.net.ssl.trustStorePassword=changeme"}]}]}}}}'
-
-oc patch deployment recommendation-v1 -n demo -p '{"spec":{"template":{"spec":{"containers":[{"name":"recommendation","args":[{"-Djavax.net.ssl.keyStore=/keystores/keystore.jks"},{"-Djavax.net.ssl.keyStorePassword=changeme"},{"-Djavax.net.ssl.trustStore=/keystores/truststore.jks"},{"-Djavax.net.ssl.trustStorePassword=changeme"}]}]}}}}'
-```
-
-## Make the route use and trust the new certificate
-
-```shell
-oc patch route customer -n demo -p '{"spec":{"tls":{"termination":"reencrypt"}}}'
-oc annotate route customer -n demo cert-utils-operator.redhat-cop.io/destinationCA-from-secret=customer
-```
-
-## Install Reloader
-
-When a certificate is renewed, the files will be updated on the container's file system. Unless the app is written to watch those files, we need to restart the application. We are going to make that happen with the [Reloader] operator
+When a certificate is renewed, the files will be updated on the container's file system. Unless the app is written to watch those files, we need to restart the application. We are going to make that happen with the [Reloader](https://github.com/stakater/Reloader) operator
 
 ```shell
 oc new-project reloader
 helm repo add stakater https://stakater.github.io/stakater-charts
 helm repo update
 helm fetch stakater/reloader
-helm template reloader-v0.0.37.tgz --namespace reloader | oc apply -f - -n reloader
-TO-TEST
+helm template reloader-v0.0.38.tgz --namespace reloader --set isOpenshift=true | oc apply -f - -n reloader
 
 ```
 
-## Configure deployments to reload upon certificate change
+## Configuring the Certificate Authorities
+
+### Deploying the Let's Encrypt cluster issuer
+
+[Let's Encrypt](https://letsencrypt.org/) represent our CA for externally visible certificates (i.e. certificates that have to be trasuted by browser and OSs of our customers). Currently this works only with OCP 4.x on AWS.
+
+```shell
+export EMAIL=<your-lets-encrypt-email>
+oc apply -f issuers/aws-credentials.yaml
+export AWS_ACCESS_KEY_ID=$(oc get secret cert-manager-dns-credentials -n cert-manager -o jsonpath='{.data.aws_access_key_id}' | base64 -d)
+export REGION=$(oc get nodes --template='{{ with $i := index .items 0 }}{{ index $i.metadata.labels "failure-domain.beta.kubernetes.io/region" }}{{ end }}')
+export zoneid=$(oc get dns cluster -o jsonpath='{.spec.publicZone.id}')
+envsubst < issuers/lets-encrypt-issuer.yaml | oc apply -f - -n cert-manager
+```
+
+### Create the internal CA issuer
+
+We assume that services that are not exposed internally get their certificates from an internal issuer (external issuer usually have a cost based on the number of certificates). To simulate this situation we are going to use the internal CA issuer from cert-manager.
+
+```shell
+oc apply -f issuers/internal-issuer.yaml -n cert-manager
+```
+
+## Deploying the Microservices Customer -> Preference -> Recommendation
+
+you can find the application described [here](https://redhat-developer-demos.github.io/istio-tutorial/istio-tutorial/1.1.x/2deploy-microservices.html#deploycustomer)
+
+Deploy it with the following:
+
+```shell
+oc new-project demo
+
+oc apply -f customer/kubernetes/Deployment.yml -n demo
+oc apply -f customer/kubernetes/Service.yml -n demo
+
+oc apply -f preference/kubernetes/Deployment.yml -n demo
+oc apply -f preference/kubernetes/Service.yml -n demo
+
+oc apply -f recommendation/kubernetes/Deployment.yml -n demo
+oc apply -f recommendation/kubernetes/Service.yml -n demo
+```
+
+At this point the pods will be failing because they expect to certificates which have not been provided yet.
+
+### Securing the customer microservice
+
+The customer service will be exposed externally via the router. The customer service route will present a trusted certificate from the let's encrypt CA and configured to re-encrypt to customer pod. The customer service pod will present a certificate from the internal CA.
+
+```shell
+## create the route
+oc create route reencrypt customer --service=customer -n demo
+## create the external certificate
+namespace=demo route=customer host=$(oc get route $route  -n $namespace -o jsonpath='{.spec.host}') envsubst < certificates/ACME-certificate.yaml | oc apply -f - -n demo
+## annotate the route to use the certificate
+oc annotate route customer -n demo cert-utils-operator.redhat-cop.io/certs-from-secret=route-customer
+## create internal certificate
+service=customer namespace=demo envsubst < certificates/internal-certificate.yaml | oc apply -f - -n demo;
+## annotate the secret to create keystores
+oc annotate secret service-customer -n demo cert-utils-operator.redhat-cop.io/generate-java-keystores=true;
+## mount the secret to the pod
+oc set volume deployment customer -n demo --add=true --type=secret --secret-name=service-customer --name=keystores --mount-path=/keystores --read-only=true
+## make the route trust the internal certificate
+oc annotate route customer -n demo cert-utils-operator.redhat-cop.io/destinationCA-from-secret=service-customer
+```
+
+Connecting to this service via the route you should see that the browser trusts the certificate.
+
+### Securing the preference microservice
+
+The preference microservice needs to be called by the customer microservice. The customer microservice trusts the internal CA, so we need to give the preference microservice a certificate from the internal CA. For educational purposes we will also expose this service via a passthrough route to see that configuration. This route will not be trusted by the browsers. This configuration requires a certificate with two SANs.
+
+```shell
+## create the passthrough route
+oc create route passthrough preference --service=preference -n demo
+## create the two-SANs certificate
+namespace=demo route=preference host=$(oc get route $route  -n $namespace -o jsonpath='{.spec.host}') service=preference envsubst < certificates/multiSAN-internal-certificate.yaml | oc apply -f - -n demo
+## annotate the secret to create keystores
+oc annotate secret route-service-preference -n demo cert-utils-operator.redhat-cop.io/generate-java-keystores=true;
+## mount the secret to the pod
+oc set volume deployment preference-v1 -n demo --add=true --type=secret --secret-name=route-service-preference --name=keystores --mount-path=/keystores --read-only=true
+```
+
+### Securing the recommendation service
+
+The recommendation service will be internal only.
+
+```shell
+service=recommendation namespace=demo envsubst < certificates/internal-certificate.yaml | oc apply -f - -n demo;
+## annotate the secret to create keystores
+oc annotate secret service-recommendation -n demo cert-utils-operator.redhat-cop.io/generate-java-keystores=true;
+## mount the secret to the pod
+oc set volume deployment recommendation-v1 -n demo --add=true --type=secret --secret-name=service-recommendation --name=keystores --mount-path=/keystores --read-only=true
+```
+
+## Manage certificate renewal
+
+### Configure deployments to reload upon certificate change
 
 ```shell
 oc annotate deployment customer -n demo secret.reloader.stakater.com/reload=customer;
