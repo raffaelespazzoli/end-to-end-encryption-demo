@@ -14,7 +14,6 @@ oc new-project cert-manager
 oc label namespace cert-manager certmanager.k8s.io/disable-validation=true
 oc apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v0.9.0/cert-manager-openshift.yaml
 oc patch deployment cert-manager -n cert-manager -p '{"spec":{"template":{"spec":{"containers":[{"name":"cert-manager","args":["--v=2","--cluster-resource-namespace=$(POD_NAMESPACE)","--leader-election-namespace=$(POD_NAMESPACE)","--dns01-recursive-nameservers=8.8.8.8:53"]}]}}}}'
-TO-TEST
 ```
 
 ### Deploying cert-utils-operator
