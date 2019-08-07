@@ -81,7 +81,7 @@ oc apply -f recommendation/kubernetes/Deployment.yml -n demo
 oc apply -f recommendation/kubernetes/Service.yml -n demo
 ```
 
-At this point the pods will be failing because they expect to certificates which have not been provided yet.
+At this point the pods will be failing because they expect certificates which have not been provided yet.
 
 ### Securing the customer microservice
 
@@ -149,6 +149,7 @@ Let's use the preference service to test the certificate renewal. We can do that
 
 ```shell
 oc patch certificate preference -n demo -p '{"spec":{"duration":"1h1m","renewBefore":"1h"}}' --type=merge
+oc delete secret oute-service-preference -n demo
 ```
 
 with this setting we should see the preference deployment redeploy every minute.
