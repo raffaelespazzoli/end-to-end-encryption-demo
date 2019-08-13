@@ -158,11 +158,11 @@ At certificate renewal the following happens:
 
 ![renewal](./media/renewal.png)
 
-1. Cert-manager contacts the confirmed CA to get a new certificate.
+1. Cert-manager contacts the configured CA to get a new certificate.
 2. Cert-manager replaces the secret content with the new certificate files.
 3. If a route is configured to use that certificate, cert-utils operator updates the route TLS configuration.
 4. If a certificate secret is annotated to expose the certificate in keystore format, cert-utils operator refreshes the keystore and truststore fields.
-5. If a certificate secret is mounted by a pod, then the kubernetes updates the content of the secret in the pod’s file system.
+5. If a certificate secret is mounted by a pod, then Kubernetes updates the content of the secret in the pod’s file system.
 
 If your app cannot reload its configuration upon a configuration file change, you can use an operator to restart your app for you.
 
