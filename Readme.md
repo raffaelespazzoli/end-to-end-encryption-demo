@@ -3,6 +3,8 @@
 this is a demo on how to create and end to end encryption for a group of microservice with self-serviced certificates.
 This demo will show step by step how to secure services for pedagogical purposes. In a real CI/CD scenario Kubernetes resources would be create with the correct configuration.
 
+![customer-preference-recommedation](./media/C-P-R.png)
+
 ## Deploying the needed operators
 
 ### Deploying cert-manager
@@ -22,8 +24,12 @@ oc patch deployment cert-manager -n cert-manager -p '{"spec":{"template":{"spec"
 
 ```shell
 oc new-project cert-utils-operator
-helm fetch https://github.com/redhat-cop/cert-utils-operator/raw/master/helm/cert-utils-operator-0.0.1.tgz
-helm template cert-utils-operator-0.0.1.tgz --namespace cert-utils-operator | oc apply -f - -n cert-utils-operator
+helm repo add cert-utils-operator https://redhat-cop.github.io/cert-utils-operator
+helm repo update
+export cert_utils_chart_version=$(helm search cert-utils-operator/cert-utils-operator | grep cert-utils-operator/cert-utils-operator | awk '{print $2}')
+helm fetch cert-utils-operator/cert-utils-operator --version ${cert_utils_chart_version}
+helm template cert-utils-operator-${cert_utils_chart_version}.tgz --namespace cert-utils-operator | oc apply -f - -n cert-utils-operator
+rm cert-utils-operator-${cert_utils_chart_version}.tgz
 ```
 
 ### Deploy Reloader
@@ -34,9 +40,10 @@ When a certificate is renewed, the files will be updated on the container's file
 oc new-project reloader
 helm repo add stakater https://stakater.github.io/stakater-charts
 helm repo update
-helm fetch stakater/reloader
-helm template reloader-v0.0.38.tgz --namespace reloader --set isOpenshift=true | oc apply -f - -n reloader
-
+export reloader_chart_version=$(helm search stakater/reloader | grep stakater/reloader | awk '{print $2}')
+helm fetch stakater/reloader --version ${reloader_chart_version}
+helm template reloader-${reloader_chart_version}.tgz --namespace reloader --set isOpenshift=true | oc apply -f - -n reloader
+rm reloader-${reloader_chart_version}.tgz
 ```
 
 ## Configuring the Certificate Authorities
@@ -48,6 +55,7 @@ helm template reloader-v0.0.38.tgz --namespace reloader --set isOpenshift=true |
 ```shell
 export EMAIL=<your-lets-encrypt-email>
 oc apply -f issuers/aws-credentials.yaml
+sleep 5
 export AWS_ACCESS_KEY_ID=$(oc get secret cert-manager-dns-credentials -n cert-manager -o jsonpath='{.data.aws_access_key_id}' | base64 -d)
 export REGION=$(oc get nodes --template='{{ with $i := index .items 0 }}{{ index $i.metadata.labels "failure-domain.beta.kubernetes.io/region" }}{{ end }}')
 export zoneid=$(oc get dns cluster -o jsonpath='{.spec.publicZone.id}')
@@ -87,28 +95,35 @@ At this point the pods will be failing because they expect certificates which ha
 
 The customer service will be exposed externally via the router. The customer service route will present a trusted certificate from the let's encrypt CA and configured to re-encrypt to customer pod. The customer service pod will present a certificate from the internal CA.
 
+![customer](./media/customer.png)
+
 ```shell
-## create the route
-oc create route reencrypt customer --service=customer --port=https -n demo
+
 ## create the external certificate
 namespace=demo route=customer host=$(oc get route $route  -n $namespace -o jsonpath='{.spec.host}') envsubst < certificates/ACME-certificate.yaml | oc apply -f - -n demo
-## annotate the route to use the certificate
-oc annotate route customer -n demo cert-utils-operator.redhat-cop.io/certs-from-secret=route-customer
 ## create internal certificate
 service=customer namespace=demo envsubst < certificates/internal-certificate.yaml | oc apply -f - -n demo;
 ## annotate the secret to create keystores
 oc annotate secret service-customer -n demo cert-utils-operator.redhat-cop.io/generate-java-keystores=true;
 ## mount the secret to the pod
 oc set volume deployment customer -n demo --add=true --type=secret --secret-name=service-customer --name=keystores --mount-path=/keystores --read-only=true
+## create the route
+oc create route reencrypt customer --service=customer --port=https -n demo
+## annotate the route to use the certificate
+oc annotate route customer -n demo cert-utils-operator.redhat-cop.io/certs-from-secret=route-customer
 ## make the route trust the internal certificate
 oc annotate route customer -n demo cert-utils-operator.redhat-cop.io/destinationCA-from-secret=service-customer
 ```
 
 Connecting to this service via the route you should see that the browser trusts the certificate.
 
+![valid certificate](./media/valid_cert.png)
+
 ### Securing the preference microservice
 
 The preference microservice needs to be called by the customer microservice. The customer microservice trusts the internal CA, so we need to give the preference microservice a certificate from the internal CA. For educational purposes we will also expose this service via a passthrough route to see that configuration. This route will not be trusted by the browsers. This configuration requires a certificate with two SANs.
+
+![preference](./media/preference.png)
 
 ```shell
 ## create the passthrough route
@@ -133,7 +148,23 @@ oc annotate secret service-recommendation -n demo cert-utils-operator.redhat-cop
 oc set volume deployment recommendation-v1 -n demo --add=true --type=secret --secret-name=service-recommendation --name=keystores --mount-path=/keystores --read-only=true
 ```
 
+At this point the app should be working.
+
+![app working](./media/app_working.png)
+
 ## Manage certificate renewal
+
+At certificate renewal the following happens:
+
+![renewal](./media/renewal.png)
+
+1. Cert-manager contacts the confirmed CA to get a new certificate.
+2. Cert-manager replaces the secret content with the new certificate files.
+3. If a route is configured to use that certificate, cert-utils operator updates the route TLS configuration.
+4. If a certificate secret is annotated to expose the certificate in keystore format, cert-utils operator refreshes the keystore and truststore fields.
+5. If a certificate secret is mounted by a pod, then the kubernetes updates the content of the secret in the pod’s file system.
+
+If your app cannot reload its configuration upon a configuration file change, you can use an operator to restart your app for you.
 
 ### Configure deployments to reload upon certificate change
 
@@ -149,7 +180,9 @@ Let's use the preference service to test the certificate renewal. We can do that
 
 ```shell
 oc patch certificate preference -n demo -p '{"spec":{"duration":"1h1m","renewBefore":"1h"}}' --type=merge
-oc delete secret oute-service-preference -n demo
+oc delete secret route-service-preference -n demo
+sleep 5
+oc annotate secret route-service-preference -n demo cert-utils-operator.redhat-cop.io/generate-java-keystores=true;
 ```
 
 with this setting we should see the preference deployment redeploy every minute.
