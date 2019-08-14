@@ -98,7 +98,8 @@ The customer service will be exposed externally via the router. The customer ser
 ![customer](./media/customer.png)
 
 ```shell
-
+## create the route
+oc create route reencrypt customer --service=customer --port=https -n demo
 ## create the external certificate
 namespace=demo route=customer host=$(oc get route $route  -n $namespace -o jsonpath='{.spec.host}') envsubst < certificates/ACME-certificate.yaml | oc apply -f - -n demo
 ## create internal certificate
@@ -107,8 +108,6 @@ service=customer namespace=demo envsubst < certificates/internal-certificate.yam
 oc annotate secret service-customer -n demo cert-utils-operator.redhat-cop.io/generate-java-keystores=true;
 ## mount the secret to the pod
 oc set volume deployment customer -n demo --add=true --type=secret --secret-name=service-customer --name=keystores --mount-path=/keystores --read-only=true
-## create the route
-oc create route reencrypt customer --service=customer --port=https -n demo
 ## annotate the route to use the certificate
 oc annotate route customer -n demo cert-utils-operator.redhat-cop.io/certs-from-secret=route-customer
 ## make the route trust the internal certificate
