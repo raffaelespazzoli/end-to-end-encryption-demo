@@ -5,6 +5,10 @@ This demo will show step by step how to secure services for pedagogical purposes
 
 ![customer-preference-recommedation](./media/C-P-R.png)
 
+You can watch a recording of the demo here:
+
+[![](http://img.youtube.com/vi/iwqysvAZ-m8/0.jpg)](http://www.youtube.com/watch?v=iwqysvAZ-m8 "end to end encryption demo")
+
 ## Deploying the needed operators
 
 ### Deploying cert-manager
