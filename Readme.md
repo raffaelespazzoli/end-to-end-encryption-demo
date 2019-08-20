@@ -1,7 +1,7 @@
 # End to End Encryption Demo
 
 this is a demo on how to create and end to end encryption for a group of microservice with self-serviced certificates.
-This demo will show step by step how to secure services for pedagogical purposes. In a real CI/CD scenario Kubernetes resources would be create with the correct configuration.
+This demo will show step by step how to secure services for andragogical purposes. In a real CI/CD scenario Kubernetes resources would be create with the correct configuration.
 
 ![customer-preference-recommedation](./media/C-P-R.png)
 
